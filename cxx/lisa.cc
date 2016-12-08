@@ -6,10 +6,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <jpeglib.h>
 #include <list>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 using std::list;
@@ -58,7 +60,7 @@ class JPEG final {
 
     width_ = cinfo.output_width;
     height_ = cinfo.output_height;
-   
+
     uint8_t* ptr = new uint8_t[width_ * height_ * 3];
 
     if (ptr == nullptr) {
@@ -68,7 +70,7 @@ class JPEG final {
 
     row_stride = width_ * cinfo.output_components;
     jbuffer = (*cinfo.mem->alloc_sarray)((j_common_ptr) &cinfo, JPOOL_IMAGE, row_stride, 1);
-   
+
     while (cinfo.output_scanline < cinfo.output_height) {
       jpeg_read_scanlines(&cinfo, jbuffer, 1);
       for (int x = 0; x < width_; ++x) {
@@ -99,9 +101,9 @@ class JPEG final {
 
     width_ = width;
     height_ = height;
-    
+
     data_ptr_ = new uint8_t[width_ * height_ * 3];
-    
+
     if (data_ptr_ != nullptr) {
       std::fill(data_ptr_, data_ptr_ + width_ * height_ * 3, 0);
     }
@@ -122,7 +124,7 @@ class JPEG final {
     jpeg_create_compress(&cinfo);
     jpeg_stdio_dest(&cinfo, outfile);
 
-    cinfo.image_width = width_;  
+    cinfo.image_width = width_;
     cinfo.image_height = height_;
     cinfo.input_components = 3;  // 3 bytes per pixel.
     cinfo.in_color_space = JCS_RGB;
@@ -142,6 +144,21 @@ class JPEG final {
     return true;
   }
 
+  // Use square distance as metric.
+  static int64_t distance(const JPEG& lhs, const JPEG& rhs) {
+    int w = lhs.width(), h = rhs.height();
+    const uint8_t* ptr1 = lhs.ptr(), *ptr2 = rhs.ptr();
+    int64_t ret = 0;
+
+    assert(w == rhs.width() && h == rhs.height());
+
+    for (int i = 0, c = w * h * 3; i < c; ++i, ++ptr1, ++ptr2) {
+      int tmp = *ptr1 - *ptr2;
+      ret += tmp * tmp;
+    }
+    return ret;
+  }
+
  private:
   int width_, height_;
   uint8_t* data_ptr_;
@@ -152,84 +169,81 @@ struct Circle {
   float a;
   uint8_t r, g, b;
 };
-using Circles = list<Circle>;
+struct Square : public Circle { };
 
-void mutate(Circles* circles, int w, int h) {
+template <typename T>
+void mutate(list<T>* shapes, int w, int h) {
   if (rand() & 1) {
-    // Add a new circle to the list tail.
-    Circle new_circle;
+    // Add a new shape to the list tail.
+    T new_shape;
 
-    new_circle.x = rand() % w;
-    new_circle.y = rand() % h;
-    new_circle.radius = rand() % 50 + 1;
-    new_circle.r = rand() & 0xff;
-    new_circle.g = rand() & 0xff;
-    new_circle.b = rand() & 0xff;
-    new_circle.a = float(rand() % 100 + 20) / 255.0;
+    new_shape.x = rand() % w;
+    new_shape.y = rand() % h;
+    new_shape.radius = rand() % 50 + 1;
+    new_shape.r = rand() & 0xff;
+    new_shape.g = rand() & 0xff;
+    new_shape.b = rand() & 0xff;
+    new_shape.a = float(rand() % 100 + 20) / 255.0;
 
-    circles->push_back(new_circle);
+    shapes->push_back(new_shape);
   } else {
-    // Randomly delete a circle at any position.
-    if (!circles->empty()) {
-      int index = rand() % circles->size();
-      Circles::iterator it = circles->begin();
-      advance(it, index);
-      circles->erase(it);
+    // Randomly delete a shape at any position.
+    if (!shapes->empty()) {
+      int index = rand() % shapes->size();
+      typename list<T>::iterator it = shapes->begin();
+      std::advance(it, index);
+      shapes->erase(it);
     }
   }
 
   // Continue mutating with 50% possibility.
   if (rand() & 1) {
-    mutate(circles, w, h);
+    mutate<T>(shapes, w, h);
   }
 }
 
-// Use square distance as metric.
-int64_t distance(const JPEG& lhs, const JPEG& rhs) {
-  int w = lhs.width(), h = rhs.height();
-  const uint8_t* ptr1 = lhs.ptr(), *ptr2 = rhs.ptr();
-  int64_t ret = 0;
-
-  assert(w == rhs.width() && h == rhs.height());
-
-  for (int i = 0, c = w * h * 3; i < c; ++i, ++ptr1, ++ptr2) {
-    int tmp = *ptr1 - *ptr2;
-    ret += tmp * tmp;
-  }
-  return ret;
-}
-
-unique_ptr<JPEG> draw(const Circles& circles, int w, int h) {
+template <
+  typename T,
+  typename = typename std::enable_if<std::is_same<T, Circle>::value || std::is_same<T, Square>::value>::type
+>
+unique_ptr<JPEG> draw(const list<T>& shapes, int w, int h) {
   unique_ptr<JPEG> img = std::make_unique<JPEG>();
 
   img->create(w, h);
-  // The earlier circle is at bottom.
-  for (Circles::const_iterator it = circles.begin(); it != circles.end(); ++it) {
+
+  for (typename list<T>::const_iterator it = shapes.begin(); it != shapes.end(); ++it) {
     int from = std::max(0, it->y - it->radius), to = std::min(h - 1, it->y + it->radius);
+    int radius2 = it->radius * it->radius;
+    float r_blend = it->a * it->r;
+    float g_blend = it->a * it->g;
+    float b_blend = it->a * it->b;
+
     for (int y = from; y <= to; ++y) {
-      int stride = int(sqrt(float(it->radius * it->radius - (y - it->y) * (y - it->y))));
+      int stride;
+
+      if (std::is_same<T, Circle>::value) {
+        stride = int(sqrt(float(radius2 - (y - it->y) * (y - it->y))));
+      } else if (std::is_same<T, Square>::value) {
+        stride = it->radius;
+      }
+
       for (int x = std::max(0, it->x - stride), to_x = std::min(w - 1, it->x + stride); x <= to_x; ++x) {
         uint8_t* ptr = img->at(x, y);
-        uint8_t r = *ptr, g = *(ptr + 1), b = *(ptr + 2);
-        r = (1 - it->a) * r + it->a * it->r;
-        g = (1 - it->a) * g + it->a * it->g;
-        b = (1 - it->a) * b + it->a * it->b;
-        *ptr = r;
-        *(ptr + 1) = g;
-        *(ptr + 2) = b;
+        *ptr = (1 - it->a) * (*ptr) + r_blend;
+        ptr += 1;
+        *ptr = (1 - it->a) * (*ptr) + g_blend;
+        ptr += 1;
+        *ptr = (1 - it->a) * (*ptr) + b_blend;
       }
     }
   }
   return img;
 }
 
-int main() {
+template <typename T>
+void loop(const JPEG& lisa) {
   const int population = 100;
-  JPEG lisa;
-  vector<Circles> circles;
-
-  lisa.load("../lisa.jpg");
-  circles.resize(population);
+  vector<list<T>> shapes(population);
 
   int w = lisa.width(), h = lisa.height();
   int64_t old_best_score = ~0ull >> 1;
@@ -237,13 +251,13 @@ int main() {
   for (int it = 0; ; ++it) {
     int64_t best_score = 0;
     int best_index = -1;
-    Circles old_best = circles[0];
+    list<T> old_best = shapes[0];
 
-    for (int i = 0; i < circles.size(); ++i) {
-      mutate(&circles[i], w, h);
+    for (int i = 0; i < shapes.size(); ++i) {
+      mutate<T>(&shapes[i], w, h);
 
-      unique_ptr<JPEG> tmp = draw(circles[i], w, h);
-      int64_t score = distance(*tmp, lisa);
+      unique_ptr<JPEG> tmp = draw<T>(shapes[i], w, h);
+      int64_t score = JPEG::distance(*tmp, lisa);
       if (best_index == -1 || score < best_score) {
         best_score = score;
         best_index = i;
@@ -251,21 +265,34 @@ int main() {
     }
     if (best_score < old_best_score) {
       old_best_score = best_score;
-      for (int i = 0; i < circles.size(); ++i) {
+      for (int i = 0; i < shapes.size(); ++i) {
         if (i != best_index) {
-          circles[i] = circles[best_index];
+          shapes[i] = shapes[best_index];
         }
       }
     } else {
-      for (int i = 0; i < circles.size(); ++i) {
-        circles[i] = old_best;
+      for (int i = 0; i < shapes.size(); ++i) {
+        shapes[i] = old_best;
       }
     }
     if (it % 10 == 0) {
-      unique_ptr<JPEG> tmp = draw(circles[0], w, h);    
+      unique_ptr<JPEG> tmp = draw(shapes[0], w, h);
       tmp->save("/tmp/lisa-output.jpg");
-      std::cout << it << " " << circles[0].size() << " " << old_best_score << std::endl;
+      std::clog << it << " " << shapes[0].size() << " " << old_best_score << std::endl;
     }
+  }
+}
+
+int main(int argv, char** argc) {
+  JPEG lisa;
+  lisa.load("../lisa.jpg");
+
+  if (argv == 2 && strcmp(argc[1], "-square") == 0) {
+    std::clog << "square" << std::endl;
+    loop<Square>(lisa);
+  } else {
+    std::clog << "circle" << std::endl;
+    loop<Circle>(lisa);
   }
 
   return 0;
