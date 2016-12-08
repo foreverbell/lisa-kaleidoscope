@@ -285,7 +285,7 @@ void loop(const JPEG& lisa) {
 
 int main(int argv, char** argc) {
   JPEG lisa;
-  lisa.load("../lisa.jpg");
+  lisa.load("../pics/lisa.jpg");
 
   if (argv == 2 && strcmp(argc[1], "-square") == 0) {
     std::clog << "square" << std::endl;
