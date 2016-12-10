@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -9,7 +10,9 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
 	"os"
+	"sync"
 )
 
 type Pixels struct {
@@ -175,10 +178,29 @@ func main() {
 		}
 
 	circles := make([][]Circle, Population)
-	oldBestScore := uint64(math.MaxUint64)
+	bestEver, bestCircles, round := uint64(math.MaxUint64), clone(circles[0]), 0
+	var mux sync.Mutex // mutex for <bestCircles> and <round>
+
+	go func(width int, height int) {
+		http.HandleFunc("/lisa", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "<html>Round: %v <br/>Score: %v <br/><img src=\"lisa.png\"></html>", round, bestEver)
+		})
+		http.HandleFunc("/lisa.png", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "image/png")
+
+			mux.Lock()
+			defer mux.Unlock()
+
+			img := drawToPNG(drawToPixel(bestCircles, width, height))
+			png.Encode(w, img)
+		})
+		http.ListenAndServe("localhost:8080", nil)
+	}(w, h)
+
+	fmt.Println("go http://localhost:8080/lisa for funny stuffs.")
 
 	for it := 0; ; it++ {
-		bestScore, bestIndex, bestCircles := uint64(0), -1, clone(circles[0])
+		bestScore, bestIndex := uint64(0), -1
 
 		for i := 0; i < Population; i++ {
 			circles[i] = mutateCircles(circles[i], w, h)
@@ -188,21 +210,15 @@ func main() {
 			}
 		}
 
-		if bestScore < oldBestScore {
-			oldBestScore, bestCircles = bestScore, clone(circles[bestIndex])
+		mux.Lock()
+		if bestScore < bestEver {
+			bestEver, bestCircles = bestScore, clone(circles[bestIndex])
 		}
 
 		for i := 0; i < Population; i++ {
 			circles[i] = clone(bestCircles)
 		}
-
-		if it%10 == 0 {
-			newPixels := drawToPixel(bestCircles, w, h)
-			log.Printf("%d %d %d\n", it, len(bestCircles), distance(lisaPixels, newPixels))
-			newImg := drawToPNG(newPixels)
-			newFile, _ := os.Create("/tmp/lisa.png")
-			png.Encode(newFile, newImg)
-			newFile.Close()
-		}
+		round = it
+		mux.Unlock()
 	}
 }
