@@ -56,14 +56,9 @@ func distance(lhs Pixels, rhs Pixels) (ret uint64) {
 		log.Fatalf("image size mismatch")
 	}
 
-	for y, i := 0, 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			for p := 0; p < 3; p++ {
-				c := uint64(lhs.Pixels[i]) - uint64(rhs.Pixels[i])
-				i += 1
-				ret += c * c
-			}
-		}
+	for i := 0; i < w*h*3; i++ {
+		c := uint64(lhs.Pixels[i]) - uint64(rhs.Pixels[i])
+		ret += c * c
 	}
 	return
 }
@@ -179,7 +174,7 @@ func main() {
 
 	circles := make([][]Circle, Population)
 	bestEver, bestCircles, round := uint64(math.MaxUint64), clone(circles[0]), 0
-	var mux sync.Mutex // mutex for <bestCircles> and <round>
+	var mux sync.Mutex // mutex for the previous 3 variables
 
 	go func(width int, height int) {
 		http.HandleFunc("/lisa", func(w http.ResponseWriter, r *http.Request) {
