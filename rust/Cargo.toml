@@ -1,0 +1,7 @@
+[package]
+name = "lisa"
+version = "0.1.0"
+authors = ["foreverbell <dql.foreverbell@gmail.com>"]
+
+[dependencies]
+image = "*"
