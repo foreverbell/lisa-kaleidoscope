@@ -1,3 +1,6 @@
+#ifndef JPEG_HPP
+#define JPEG_HPP
+
 #include <cstdint>
 #include <jpeglib.h>
 #include <memory>
@@ -20,7 +23,7 @@ class JPEG final {
   uint8_t* ptr() const { return data_ptr_; }
   uint8_t* at(int x, int y) { return data_ptr_ + (y * width_ + x) * 3; }
 
-  bool load(const char* path) {
+  bool load(FILE* infile) {
     if (data_ptr_ != nullptr) {
       delete [] data_ptr_;
     }
@@ -30,11 +33,6 @@ class JPEG final {
     struct jpeg_error_mgr jerr;
     JSAMPARRAY jbuffer;
     int row_stride;
-    FILE* infile = fopen(path, "rb");
-
-    if (infile == nullptr) {
-      return false;
-    }
 
     cinfo.err = jpeg_std_error(&jerr);
     jpeg_create_decompress(&cinfo);
@@ -71,7 +69,6 @@ class JPEG final {
         *(ptr++) = b;
       }
     }
-    fclose(infile);
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
 
@@ -94,15 +91,10 @@ class JPEG final {
     return data_ptr_ != nullptr;
   }
 
-  bool save(const char* path) {
+  bool save(FILE* outfile) {
     struct jpeg_compress_struct cinfo;
     struct jpeg_error_mgr jerr;
     JSAMPROW row_pointer[1];
-    FILE *outfile = fopen(path, "wb");
-
-    if (outfile == nullptr) {
-      return false;
-    }
 
     cinfo.err = jpeg_std_error(&jerr);
     jpeg_create_compress(&cinfo);
@@ -124,7 +116,6 @@ class JPEG final {
 
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
-    fclose(outfile);
 
     return true;
   }
@@ -149,3 +140,4 @@ class JPEG final {
   uint8_t* data_ptr_;
 };
 
+#endif // JPEG_HPP

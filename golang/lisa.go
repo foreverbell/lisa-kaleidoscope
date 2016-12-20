@@ -178,6 +178,9 @@ func main() {
 
 	go func(width int, height int) {
 		http.HandleFunc("/lisa", func(w http.ResponseWriter, r *http.Request) {
+			mux.Lock()
+			defer mux.Unlock()
+
 			fmt.Fprintf(w, "<html>Round: %v <br/>Score: %v <br/><img src=\"lisa.png\"></html>", round, bestEver)
 		})
 		http.HandleFunc("/lisa.png", func(w http.ResponseWriter, r *http.Request) {
