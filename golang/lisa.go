@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 type Pixels struct {
@@ -147,8 +149,13 @@ func drawToPNG(pixels Pixels) image.Image {
 }
 
 func main() {
+	var port = flag.Int("port", 8080, "port")
+	flag.Parse()
+
 	var lisaFile *os.File
 	var lisaImg image.Image
+
+	startTime := time.Now()
 
 	lisaFile, err := os.Open("../pics/lisa.jpg")
 	if err != nil {
@@ -181,7 +188,7 @@ func main() {
 			mux.Lock()
 			defer mux.Unlock()
 
-			fmt.Fprintf(w, "<html>Round: %v <br/>Score: %v <br/><img src=\"lisa.png\"></html>", round, bestEver)
+			fmt.Fprintf(w, "<html>Round: %v <br/>Score: %v <br/>Elapsed: %v <br/><img src=\"lisa.png\"></html>", round, bestEver, time.Since(startTime))
 		})
 		http.HandleFunc("/lisa.png", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/png")
@@ -192,10 +199,10 @@ func main() {
 			img := drawToPNG(drawToPixel(bestCircles, width, height))
 			png.Encode(w, img)
 		})
-		http.ListenAndServe("localhost:8080", nil)
+		http.ListenAndServe(fmt.Sprintf("localhost:%d", *port), nil)
 	}(w, h)
 
-	fmt.Println("go http://localhost:8080/lisa for funny stuffs.")
+	fmt.Printf("go http://localhost:%d/lisa for funny stuffs.\n", *port)
 
 	for it := 0; ; it++ {
 		bestScore, bestIndex := uint64(0), -1
