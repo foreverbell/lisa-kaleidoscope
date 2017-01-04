@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <arpa/inet.h>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -111,7 +112,7 @@ unique_ptr<JPEG> draw(const list<T>& shapes, int w, int h) {
 
 template <typename T>
 struct Lisa {
-  mutex mutex;
+  mutex mutex_lock;
   int width, height;
   int round;     // which round is right now
   int64_t score; // the best score of lisa
@@ -143,7 +144,7 @@ void lisaLoop(const JPEG& img, Lisa<T>* lisa) {
       }
     }
     {
-      lock_guard<mutex> scope_lock(lisa->mutex);
+      lock_guard<mutex> scope_lock(lisa->mutex_lock);
 
       lisa->round = it;
       if (best_score < lisa->score) {
@@ -228,7 +229,7 @@ void httpHandler(int connfd, Lisa<T>* lisa) {
 
   // TODO: Use rio_writen.
   if (strcasecmp(buf, "/lisa") == 0) {
-    lock_guard<mutex> scope_lock(lisa->mutex);
+    lock_guard<mutex> scope_lock(lisa->mutex_lock);
 
     fprintf(pipe, "HTTP/1.0 200 OK\r\n");
     fprintf(pipe, "Content-Type: text/html\r\n");
@@ -241,7 +242,7 @@ void httpHandler(int connfd, Lisa<T>* lisa) {
       </html>
       )", lisa->round, lisa->score);
   } else if (strcasecmp(buf, "/lisa.jpg") == 0) {
-    lock_guard<mutex> scope_lock(lisa->mutex);
+    lock_guard<mutex> scope_lock(lisa->mutex_lock);
 
     fprintf(pipe, "HTTP/1.0 200 OK\r\n");
     fprintf(pipe, "Content-Type: image/jpeg\r\n");
