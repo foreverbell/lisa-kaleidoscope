@@ -116,27 +116,27 @@ struct Lisa {
   int width, height;
   int round;     // which round is right now
   int64_t score; // the best score of lisa
-  list<T> shape; // the best shape
+  list<T> shapes; // the best shapes
 };
 
 template <typename T>
 void lisaLoop(const JPEG& img, Lisa<T>* lisa) {
   const int population = 100;
-  vector<list<T>> shapes(population);
+  vector<list<T>> shapes_vec(population);
 
   int w = img.width(), h = img.height();
 
   lisa->score = ~0ull >> 1;
-  lisa->shape = shapes[0];
+  lisa->shapes = shapes_vec[0];
 
   for (int it = 0; ; ++it) {
     int best_index = -1;
     int64_t best_score = 0;
 
-    for (int i = 0; i < shapes.size(); ++i) {
-      mutate<T>(&shapes[i], w, h);
+    for (int i = 0; i < shapes_vec.size(); ++i) {
+      mutate<T>(&shapes_vec[i], w, h);
 
-      unique_ptr<JPEG> tmp = draw<T>(shapes[i], w, h);
+      unique_ptr<JPEG> tmp = draw<T>(shapes_vec[i], w, h);
       int64_t score = JPEG::distance(*tmp, img);
       if (best_index == -1 || score < best_score) {
         best_score = score;
@@ -149,17 +149,17 @@ void lisaLoop(const JPEG& img, Lisa<T>* lisa) {
       lisa->round = it;
       if (best_score < lisa->score) {
         lisa->score = best_score;
-        lisa->shape = shapes[best_index];
+        lisa->shapes = shapes_vec[best_index];
       } else {
         best_score = lisa->score;
       }
-      shapes[0] = lisa->shape;
+      shapes_vec[0] = lisa->shapes;
     }
-    for (int i = 1; i < shapes.size(); ++i) {
-      shapes[i] = shapes[0];
+    for (int i = 1; i < shapes_vec.size(); ++i) {
+      shapes_vec[i] = shapes_vec[0];
     }
     if (it % 30 == 0) {
-      fprintf(stderr, "round = %d, shapes = %zu, best = %ld.\n", it, shapes[0].size(), best_score);
+      fprintf(stderr, "round = %d, shapes = %zu, best = %ld.\n", it, shapes_vec[0].size(), best_score);
     }
   }
 }
@@ -248,7 +248,7 @@ void httpHandler(int connfd, Lisa<T>* lisa) {
     fprintf(pipe, "Content-Type: image/jpeg\r\n");
     fprintf(pipe, "\r\n");
 
-    draw(lisa->shape, lisa->width, lisa->height)->save(pipe);
+    draw(lisa->shapes, lisa->width, lisa->height)->save(pipe);
   }
 }
 
