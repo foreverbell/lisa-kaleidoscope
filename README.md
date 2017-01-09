@@ -4,8 +4,17 @@
 
 Some funny thing powered by [genetic algorithm](https://en.wikipedia.org/wiki/Genetic_algorithm)
 implemented in different languages. As I learn one programming language by building some small,
-funny but full-functional program, this is a good example for me to get familiar with one
+funny but full-functional programs, this is a good example for me to get familiar with one
 programming language, including basic syntax, programming model, asynchronous IO and e.t.c.
+
+![](https://upload.wikimedia.org/wikipedia/commons/f/f1/Monkey-typing.jpg)
+
+Imagine your have one hundred monkeys, and you give each of them a colorful pencil and paper. Your
+monkeys are creatures that are brilliant at drawing circles! Each turn your ask every monkey to
+draw a randomized filled circle on the paper. After that you compare their works with
+[Leonardo da Vinci](https://en.wikipedia.org/wiki/Leonardo_da_Vinci)'s Mona Lisa, choose the best
+among your monkeys' works including the last turn's best one, make one hundred hard-copys and let
+your monkeys do again. Well.. do you think your monkeys will eventually draw you a Mona Lisa?
 
 ## Usage
 
