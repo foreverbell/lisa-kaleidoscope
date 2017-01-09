@@ -23,7 +23,7 @@ $ make run
 
 Make sure you have the corresponding toolchain before you compile it.
 
-Navigate to `http://localhost:8080` with your browser to see funny stuffs.
+Navigate to `http://localhost:8080/lisa` with your browser to see funny stuffs.
 
 ## Animation
 
