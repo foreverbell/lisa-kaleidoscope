@@ -4,10 +4,16 @@ extern crate rand;
 
 use std::cmp;
 use std::collections::LinkedList;
-use std::fs::File;
+use std::env::args;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+use hyper::server::{Request, Response};
+use hyper::status::StatusCode;
+use hyper::uri::RequestUri;
 use image::{GenericImage, Pixel};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Color {
     a: u8,
     r: u8,
@@ -15,7 +21,7 @@ struct Color {
     b: u8,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Circle {
     x: i64,
     y: i64,
@@ -23,6 +29,7 @@ struct Circle {
     color: Color,
 }
 
+#[derive(Debug, Clone)]
 struct Square(Circle);
 
 trait Shape {
@@ -106,7 +113,11 @@ struct Pixels {
 
 impl Pixels {
     fn create(w: u64, h: u64) -> Self {
-        Pixels { w: w, h: h, pixels: vec![0; (w * h * 3) as usize] }
+        Pixels {
+            w: w,
+            h: h,
+            pixels: vec![0; (w * h * 3) as usize],
+        }
     }
 
     fn create_from(img: image::DynamicImage) -> Self {
@@ -157,7 +168,10 @@ fn mutate<T: Shape>(mut shapes: LinkedList<T>, w: u64, h: u64) -> LinkedList<T> 
             g: random(256) as u8,
             b: random(256) as u8,
         };
-        let new_shape: T = Shape::new(random(w) as i64, random(h) as i64, random(50) as i64 + 1, color);
+        let new_shape: T = Shape::new(random(w) as i64,
+                                      random(h) as i64,
+                                      random(50) as i64 + 1,
+                                      color);
 
         shapes.push_front(new_shape);
     } else if !shapes.is_empty() {
@@ -219,61 +233,114 @@ fn draw_to_img(pixels: Pixels) -> image::DynamicImage {
     image::ImageRgb8(imgbuf)
 }
 
-struct Lisa {
+struct Lisa<T: Shape> {
     w: u64,
     h: u64,
     round: u64,
     score: u64,
-    shapes: LinkedList<Circle>,
+    shapes: LinkedList<T>,
 }
 
-fn main() {
+fn run<T: Shape + Clone + Send + 'static>() {
     let img = image::open("../pics/lisa.jpg").unwrap();
     let w: u64 = img.dimensions().0 as u64;
     let h: u64 = img.dimensions().1 as u64;
 
     let lisa_img = Pixels::create_from(img);
     let population: usize = 100;
-    let mut shapes_vec: Vec<LinkedList<Circle>> = vec![LinkedList::new(); population];
-    
-    let mut lisa_ctx: Lisa = Lisa {
+    let mut shapes_vec: Vec<LinkedList<T>> = vec![LinkedList::new(); population];
+
+    let lisa_ctx: Arc<Mutex<Lisa<T>>> = Arc::new(Mutex::new(Lisa {
         w: w,
         h: h,
         round: 0,
         score: std::u64::MAX,
         shapes: shapes_vec[0].clone(),
-    };
+    }));
+
+    {
+        let lisa_ctx = lisa_ctx.clone();  // increase the reference count.
+        thread::spawn(move || {
+            let http_server: hyper::Server = hyper::Server::http("localhost:8080").unwrap();
+
+            http_server.handle(move |req: Request, mut res: Response| {
+                if let (hyper::Get, RequestUri::AbsolutePath(ref uri)) = (req.method, req.uri) {
+                    match uri.as_str() {
+                        "/lisa.png" => {
+                            let lisa_ctx = lisa_ctx.lock().unwrap();
+                            let mut buf: Vec<u8> = Vec::new();
+
+                            draw_to_img(draw_to_pixels(&lisa_ctx.shapes,
+                                                       lisa_ctx.w,
+                                                       lisa_ctx.h)).save(&mut buf, image::PNG);
+                            res.headers_mut().set_raw("Content-Type", vec![b"image/png".to_vec()]);
+                            *res.status_mut() = StatusCode::Ok;
+                            res.send(&buf);
+                            return;
+                        }
+                        "/lisa" => {
+                            let lisa_ctx = lisa_ctx.lock().unwrap();
+                            let buf: String = format!("<html> \
+                                                         Round: {}<br/> \
+                                                         Score: {}<br/> \
+                                                         <img src=\"lisa.png\"> \
+                                                       </html>", lisa_ctx.round, lisa_ctx.score);
+
+                            *res.status_mut() = StatusCode::Ok;
+                            res.send(buf.as_bytes());
+                            return;
+                        }
+                        _ => *res.status_mut() = StatusCode::NotFound,
+                    }
+                }
+                *res.status_mut() = StatusCode::NotFound;
+            }).unwrap();
+        });
+    }
 
     loop {
         shapes_vec = shapes_vec.into_iter().map(|shapes| mutate(shapes, w, h)).collect();
         {
-            let mut best: &LinkedList<Circle> = &shapes_vec[0];
-            let mut best_img: Pixels = draw_to_pixels(&shapes_vec[0], w, h);
-            let mut best_score: u64 = distance(&lisa_img, &best_img);
+            let win: LinkedList<T>;
+            {
+                let mut best: &LinkedList<T> = &shapes_vec[0];
+                let mut best_score: u64 = distance(&lisa_img, &draw_to_pixels(best, w, h));
 
-            for i in 1 .. population {
-                let img: Pixels = draw_to_pixels(&shapes_vec[i], w, h);
-                let score: u64 = distance(&lisa_img, &img);
+                for i in 1..population {
+                    let img: Pixels = draw_to_pixels(&shapes_vec[i], w, h);
+                    let score: u64 = distance(&lisa_img, &img);
 
-                if score < best_score {
-                    best_score = score;
-                    best_img = img;
-                    best = &shapes_vec[i];
+                    if score < best_score {
+                        best_score = score;
+                        best = &shapes_vec[i];
+                    }
+                }
+
+                let mut lisa_ctx = lisa_ctx.lock().unwrap();
+                if best_score < lisa_ctx.score {
+                    lisa_ctx.score = best_score;
+                    lisa_ctx.shapes = best.clone();
+                }
+                lisa_ctx.round += 1;
+                win = lisa_ctx.shapes.clone();
+
+                if lisa_ctx.round % 30 == 0 {
+                    println!("round = {}, score = {}, shapes = {}.",
+                             lisa_ctx.round, lisa_ctx.score, lisa_ctx.shapes.len());
                 }
             }
-            if best_score < lisa_ctx.score {
-                lisa_ctx.score = best_score;
-                lisa_ctx.shapes = best.clone();
+
+            for shape in &mut shapes_vec {
+                *shape = win.clone();
             }
-            lisa_ctx.round += 1;
-            println!("round = {}, score = {}, shapes = {}.", lisa_ctx.round, lisa_ctx.score, lisa_ctx.shapes.len());
-
         }
-        for shape in &mut shapes_vec {
-            *shape = lisa_ctx.shapes.clone();
-        }
+    }
+}
 
-        let mut fout = File::create("/tmp/lisa.png").unwrap();
-        draw_to_img(draw_to_pixels(&lisa_ctx.shapes, lisa_ctx.w, lisa_ctx.h)).save(&mut fout, image::PNG);
+fn main() {
+    if args().len() == 2 && args().collect::<Vec<String>>()[1] == "-square" {
+        run::<Square>();
+    } else {
+        run::<Circle>();
     }
 }
