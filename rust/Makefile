@@ -5,3 +5,5 @@ target/release/lisa: src/main.rs
 
 run: target/release/lisa
 	cargo run --release
+
+.PHONY: run

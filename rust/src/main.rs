@@ -276,7 +276,6 @@ fn run<T: Shape + Clone + Send + 'static>() {
                             res.headers_mut().set_raw("Content-Type", vec![b"image/png".to_vec()]);
                             *res.status_mut() = StatusCode::Ok;
                             res.send(&buf);
-                            return;
                         }
                         "/lisa" => {
                             let lisa_ctx = lisa_ctx.lock().unwrap();
@@ -288,12 +287,12 @@ fn run<T: Shape + Clone + Send + 'static>() {
 
                             *res.status_mut() = StatusCode::Ok;
                             res.send(buf.as_bytes());
-                            return;
                         }
                         _ => *res.status_mut() = StatusCode::NotFound,
                     }
+                } else {
+                    *res.status_mut() = StatusCode::NotFound;
                 }
-                *res.status_mut() = StatusCode::NotFound;
             }).unwrap();
         });
     }
