@@ -10,7 +10,7 @@ programming language, including basic syntax, programming model, asynchronous IO
 ![](https://upload.wikimedia.org/wikipedia/commons/f/f1/Monkey-typing.jpg)
 
 Imagine your have one hundred monkeys, and you give each of them a colorful pencil and paper. Your
-monkeys are creatures that are brilliant at drawing circles! Each turn your ask every monkey to
+monkeys are creatures that are brilliant at drawing circles! At each turn you ask every monkey to
 draw a randomized filled circle on the paper. After that you compare their works with
 [Leonardo da Vinci](https://en.wikipedia.org/wiki/Leonardo_da_Vinci)'s Mona Lisa, choose the best
 among your monkeys' works including the last turn's best one, make one hundred hard-copys and let
