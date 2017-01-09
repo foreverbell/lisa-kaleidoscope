@@ -173,7 +173,7 @@ fn mutate<T: Shape>(mut shapes: LinkedList<T>, w: u64, h: u64) -> LinkedList<T> 
                                       random(50) as i64 + 1,
                                       color);
 
-        shapes.push_front(new_shape);
+        shapes.push_back(new_shape);
     } else if !shapes.is_empty() {
         let index = random(shapes.len() as u64);
         let mut tail: LinkedList<T> = shapes.split_off(index as usize);
