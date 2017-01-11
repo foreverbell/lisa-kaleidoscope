@@ -18,8 +18,8 @@ your monkeys do again. Well.. do you think your monkeys will eventually draw you
 
 ## Usage
 
-Currently it is implemented in the following languages, I will add more if I am interest in other
-languages.
+Currently it is implemented in the following languages, I will add more if I am interested in
+other languages.
 
 * C++
 * Golang
@@ -30,7 +30,7 @@ $ cd $LANGUAGE
 $ make run
 ```
 
-Make sure you have the corresponding toolchain before you compile it.
+Make sure you have the corresponding toolchain installed before you compile it.
 
 Navigate to `http://localhost:8080/lisa` with your browser to see funny stuffs.
 

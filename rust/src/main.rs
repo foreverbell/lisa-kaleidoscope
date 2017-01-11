@@ -241,6 +241,44 @@ struct Lisa<T: Shape> {
     shapes: LinkedList<T>,
 }
 
+fn run_http_server<T: Shape + Clone + Send + 'static>(lisa_ctx: Arc<Mutex<Lisa<T>>>) {
+    thread::spawn(move || {
+        let http_server: hyper::Server = hyper::Server::http("localhost:8080").unwrap();
+
+        http_server.handle(move |req: Request, mut res: Response| {
+            if let (hyper::Get, RequestUri::AbsolutePath(ref uri)) = (req.method, req.uri) {
+                match uri.as_str() {
+                    "/lisa.png" => {
+                        let lisa_ctx = lisa_ctx.lock().unwrap();
+                        let mut buf: Vec<u8> = Vec::new();
+
+                        draw_to_img(draw_to_pixels(&lisa_ctx.shapes,
+                                                   lisa_ctx.w,
+                                                   lisa_ctx.h)).save(&mut buf, image::PNG);
+                        res.headers_mut().set_raw("Content-Type", vec![b"image/png".to_vec()]);
+                        *res.status_mut() = StatusCode::Ok;
+                        res.send(&buf);
+                    }
+                    "/lisa" => {
+                        let lisa_ctx = lisa_ctx.lock().unwrap();
+                        let buf: String = format!("<html> \
+                                                     Round: {}<br/> \
+                                                     Score: {}<br/> \
+                                                     <img src=\"lisa.png\"> \
+                                                   </html>", lisa_ctx.round, lisa_ctx.score);
+
+                        *res.status_mut() = StatusCode::Ok;
+                        res.send(buf.as_bytes());
+                    }
+                    _ => *res.status_mut() = StatusCode::NotFound,
+                }
+            } else {
+                *res.status_mut() = StatusCode::NotFound;
+            }
+        }).unwrap();
+    });
+}
+
 fn run<T: Shape + Clone + Send + 'static>() {
     let img = image::open("../pics/lisa.jpg").unwrap();
     let w: u64 = img.dimensions().0 as u64;
@@ -258,44 +296,7 @@ fn run<T: Shape + Clone + Send + 'static>() {
         shapes: shapes_vec[0].clone(),
     }));
 
-    {
-        let lisa_ctx = lisa_ctx.clone();  // increase the reference count.
-        thread::spawn(move || {
-            let http_server: hyper::Server = hyper::Server::http("localhost:8080").unwrap();
-
-            http_server.handle(move |req: Request, mut res: Response| {
-                if let (hyper::Get, RequestUri::AbsolutePath(ref uri)) = (req.method, req.uri) {
-                    match uri.as_str() {
-                        "/lisa.png" => {
-                            let lisa_ctx = lisa_ctx.lock().unwrap();
-                            let mut buf: Vec<u8> = Vec::new();
-
-                            draw_to_img(draw_to_pixels(&lisa_ctx.shapes,
-                                                       lisa_ctx.w,
-                                                       lisa_ctx.h)).save(&mut buf, image::PNG);
-                            res.headers_mut().set_raw("Content-Type", vec![b"image/png".to_vec()]);
-                            *res.status_mut() = StatusCode::Ok;
-                            res.send(&buf);
-                        }
-                        "/lisa" => {
-                            let lisa_ctx = lisa_ctx.lock().unwrap();
-                            let buf: String = format!("<html> \
-                                                         Round: {}<br/> \
-                                                         Score: {}<br/> \
-                                                         <img src=\"lisa.png\"> \
-                                                       </html>", lisa_ctx.round, lisa_ctx.score);
-
-                            *res.status_mut() = StatusCode::Ok;
-                            res.send(buf.as_bytes());
-                        }
-                        _ => *res.status_mut() = StatusCode::NotFound,
-                    }
-                } else {
-                    *res.status_mut() = StatusCode::NotFound;
-                }
-            }).unwrap();
-        });
-    }
+    run_http_server(lisa_ctx.clone());
 
     loop {
         shapes_vec = shapes_vec.into_iter().map(|shapes| mutate(shapes, w, h)).collect();
